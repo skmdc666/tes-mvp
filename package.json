@@ -7,6 +7,11 @@
     "dev": "nodemon src/index.js",
     "start": "node src/index.js",
     "build": "echo 'No build step required for Railway'",
+    "db:generate": "drizzle-kit generate:sqlite",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio",
+    "db:seed": "tsx src/db/seed.ts",
+    "db:setup": "npm run db:migrate && npm run db:seed",
     "test": "echo 'No tests yet'",
     "docker:dev": "docker-compose -f docker-compose.dev.yml up --build",
     "docker:dev:detached": "docker-compose -f docker-compose.dev.yml up --build -d",
@@ -16,15 +21,22 @@
     "docker:stop:dev": "docker-compose -f docker-compose.dev.yml down",
     "start:dev": "./scripts/start-dev.sh",
     "stop:dev": "./scripts/stop-dev.sh",
-    "db:migrate": "docker-compose -f docker-compose.dev.yml exec -T app npm run migrate",
-    "db:reset": "docker-compose -f docker-compose.dev.yml exec -T psql -U tes_user_dev -d tes_mvp_dev -c \"DROP SCHEMA public CASCADE; CREATE SCHEMA public;\""
+    "db:migrate": "docker-compose -f docker-compose.dev.yml exec -T app npm run db:migrate",
+    "db:reset": "docker-compose -f docker-compose.dev.yml exec -T psql -U tes_user_dev -d tes_mvp_dev -c \"DROP SCHEMA public CASCADE; CREATE SCHEMA public;\"",
+    "db:seed:dev": "docker-compose -f docker-compose.dev.yml exec -T app npm run db:seed",
+    "db:setup:dev": "docker-compose -f docker-compose.dev.yml exec -T app npm run db:setup"
   },
   "dependencies": {
     "express": "^4.18.2",
     "pg": "^8.11.3",
+    "pg-core": "^0.21.0",
     "cors": "^2.8.5",
     "helmet": "^7.1.0",
-    "dotenv": "^16.3.1"
+    "dotenv": "^16.3.1",
+    "drizzle-orm": "^0.33.0",
+    "drizzle-kit": "^0.22.0",
+    "@paralleldrive/cuid2": "^2.2.2",
+    "tsx": "^4.6.2"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"
