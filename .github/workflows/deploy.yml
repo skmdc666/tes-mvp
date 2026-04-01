@@ -1,0 +1,34 @@
+name: Deploy to Railway
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    name: Deploy to Railway
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to Railway
+        uses: railwayapp/action-deploy@v1
+        with:
+          railway-token: ${{ secrets.RAILWAY_TOKEN }}
+          service-id: ${{ secrets.RAILWAY_SERVICE_ID }}
+
+  deploy-staging:
+    runs-on: ubuntu-latest
+    name: Deploy Staging to Railway
+    if: github.ref == 'refs/heads/develop'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to Railway (Staging)
+        uses: railwayapp/action-deploy@v1
+        with:
+          railway-token: ${{ secrets.RAILWAY_TOKEN }}
+          service-id: ${{ secrets.RAILWAY_SERVICE_ID_STAGING }}
+          environment: staging
