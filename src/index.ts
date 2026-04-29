@@ -7,9 +7,12 @@ import 'dotenv/config';
 import { cacheMiddleware, prewarmCache } from './cache';
 import { createMonitoring } from './monitoring';
 import { webSocketManager } from './websocket';
+import { errorHandler, notFoundHandler } from './middleware/error.middleware';
 import tasksRouter from './routes/tasks';
 import authRouter from './routes/auth';
 import usersRouter from './routes/users';
+import projectsRouter from './routes/projects';
+import teamsRouter from './routes/teams';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -44,16 +47,18 @@ app.get('/api/ws/status', (req, res) => {
   });
 });
 
-// API routes
-app.use('/api/auth', authRouter);
-app.use('/api/users', usersRouter);
-app.use('/api/tasks', tasksRouter);
+// API routes (v1)
+app.use('/api/v1/auth', authRouter);
+app.use('/api/v1/users', usersRouter);
+app.use('/api/v1/tasks', tasksRouter);
+app.use('/api/v1/projects', projectsRouter);
+app.use('/api/v1/projects/:projectId/teams', teamsRouter);
 
-// Error handling
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ error: 'Something went wrong!' });
-});
+// 404 handler (must be before error handler)
+app.use(notFoundHandler);
+
+// Error handling (must be last)
+app.use(errorHandler);
 
 // Pre-warm cache on startup
 async function startServer() {
