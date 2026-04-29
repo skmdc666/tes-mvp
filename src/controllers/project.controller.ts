@@ -1,29 +1,34 @@
 import { Request, Response } from 'express';
 import { db } from '../db/index';
 import { projects, projectMembers } from '../db/schema';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, count } from 'drizzle-orm';
 import { z } from 'zod';
 import { createId } from '@paralleldrive/cuid2';
-import type { CreateProjectRequest, UpdateProjectRequest, ProjectResponse } from '../types/index';
 
 // Validation schemas
 const createProjectSchema = z.object({
   name: z.string().min(1).max(255),
   description: z.string().max(1000).optional(),
-  key: z.string().min(1).max(10).optional(),
-  icon: z.string().optional(),
+  color: z.string().optional().default('#3B82F6'),
+  isPublic: z.boolean().optional().default(false),
 });
 
-const updateProjectSchema = createProjectSchema.partial().omit({ key: true });
+const updateProjectSchema = z.object({
+  name: z.string().min(1).max(255).optional(),
+  description: z.string().max(1000).optional(),
+  status: z.enum(['active', 'archived', 'completed']).optional(),
+  color: z.string().optional(),
+});
 
 // Helper to convert DB project to response
-function projectToResponse(dbProject: any): ProjectResponse {
+function projectToResponse(dbProject: any) {
   return {
     id: dbProject.id,
     name: dbProject.name,
-    description: dbProject.description || undefined,
-    key: dbProject.key,
-    icon: dbProject.icon || undefined,
+    description: dbProject.description || null,
+    status: dbProject.status,
+    color: dbProject.color,
+    isPublic: dbProject.isPublic === 1 ? true : false,
     createdBy: dbProject.createdBy,
     createdAt: dbProject.createdAt,
     updatedAt: dbProject.updatedAt,
@@ -42,15 +47,13 @@ export const projectController = {
       const projectId = createId();
       const now = new Date();
 
-      // Generate key if not provided
-      const key = data.key || data.name.toUpperCase().substring(0, 5).replace(/\s+/g, '');
-
       const newProject = {
         id: projectId,
         name: data.name,
         description: data.description || null,
-        key,
-        icon: data.icon || null,
+        status: 'active' as const,
+        color: data.color || '#3B82F6',
+        isPublic: data.isPublic ? 1 : 0,
         createdBy: req.user.id,
         createdAt: now,
         updatedAt: now,
@@ -64,6 +67,7 @@ export const projectController = {
         userId: req.user.id,
         role: 'admin',
         joinedAt: now,
+        isActive: 1,
       });
 
       res.status(201).json(projectToResponse(newProject));
@@ -104,17 +108,16 @@ export const projectController = {
         .limit(pageSize)
         .offset(offset);
 
-      const total = await db
-        .select({ count: projectMembers.id })
+      const totalResult = await db
+        .select({ count: count() })
         .from(projectMembers)
-        .where(eq(projectMembers.userId, req.user.id))
-        .limit(1);
+        .where(eq(projectMembers.userId, req.user.id));
 
       const projectList = userProjects.map(up => projectToResponse(up.project));
 
       res.json({
         projects: projectList,
-        total: total[0]?.count || 0,
+        total: totalResult[0]?.count || 0,
         page,
         pageSize,
       });
@@ -182,10 +185,12 @@ export const projectController = {
         return res.status(403).json({ error: 'Only project admins can update' });
       }
 
-      const updateData: any = {
-        ...data,
-        updatedAt: new Date(),
-      };
+      const updateData: any = {};
+      if (data.name) updateData.name = data.name;
+      if (data.description !== undefined) updateData.description = data.description;
+      if (data.status) updateData.status = data.status;
+      if (data.color) updateData.color = data.color;
+      updateData.updatedAt = new Date();
 
       await db.update(projects).set(updateData).where(eq(projects.id, projectId));
 
