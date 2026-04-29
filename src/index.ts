@@ -7,6 +7,8 @@ import 'dotenv/config';
 import { cacheMiddleware, prewarmCache } from './cache';
 import { createMonitoring } from './monitoring';
 import { webSocketManager } from './websocket';
+import { logger, httpLogger } from './logger';
+import cloudWatchLogger from './cloudwatch';
 import { errorHandler, notFoundHandler } from './middleware/error.middleware';
 import tasksRouter from './routes/tasks';
 import authRouter from './routes/auth';
@@ -22,6 +24,9 @@ const server = http.createServer(app);
 
 // Initialize WebSocket
 webSocketManager.initialize(server);
+
+// Structured logging middleware (must be early)
+app.use(httpLogger);
 
 // Performance monitoring middleware
 const monitoringMiddleware = createMonitoring(app);
@@ -62,14 +67,16 @@ app.use(errorHandler);
 
 // Pre-warm cache on startup
 async function startServer() {
-  console.log('Warming up cache...');
+  logger.info('Warming up cache...');
   await prewarmCache();
 
-  console.log(`Server running on port ${PORT}`);
-  console.log('WebSocket server initialized and listening');
+  logger.info({ port: PORT, websocket: 'enabled' }, 'Server starting');
   server.listen(PORT, () => {
-    console.log(`✅ Server ready on http://localhost:${PORT}`);
+    logger.info({ port: PORT, url: `http://localhost:${PORT}` }, 'Server ready');
   });
 }
 
-startServer().catch(console.error);
+startServer().catch((err) => {
+  logger.error({ error: err }, 'Server startup failed');
+  process.exit(1);
+});
