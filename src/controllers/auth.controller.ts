@@ -55,7 +55,6 @@ async function hashRefreshToken(token: string): Promise<string> {
 export const authController = {
   // User registration
   async register(req: Request, res: Response) {
-    console.log('Register function called with body:', req.body);
     try {
       const userData = registerSchema.parse(req.body);
 
@@ -77,23 +76,18 @@ export const authController = {
       const now = new Date();
       const userId = createId(); // Generate unique ID
 
-      // Insert user using raw SQL to avoid Drizzle issues
-      const insertUser = db.prepare(`
-        INSERT INTO users (id, email, password_hash, first_name, last_name, is_active, email_verified, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `);
-
-      const newUser = insertUser.run(
-        userId,
-        userData.email,
-        hashedPassword,
-        userData.firstName,
-        userData.lastName,
-        1, // isActive
-        0, // emailVerified
-        now.toISOString(),
-        now.toISOString()
-      );
+      // Insert user using Drizzle
+      await db.insert(users).values({
+        id: userId,
+        email: userData.email,
+        passwordHash: hashedPassword,
+        firstName: userData.firstName,
+        lastName: userData.lastName,
+        isActive: 1,
+        emailVerified: 0,
+        createdAt: now,
+        updatedAt: now,
+      });
 
       // Get the inserted user
       const userRecord = await db
@@ -102,27 +96,37 @@ export const authController = {
         .where(eq(users.id, userId))
         .limit(1);
 
+      if (!userRecord.length) {
+        return res.status(500).json({ error: 'Failed to create user' });
+      }
+
+      const newUser = userRecord[0];
+
       // Generate tokens
-      const accessToken = generateAccessToken(newUser[0].id);
-      const refreshToken = generateRefreshToken(newUser[0].id);
+      const accessToken = generateAccessToken(newUser.id);
+      const refreshToken = generateRefreshToken(newUser.id);
       const hashedRefreshToken = await hashRefreshToken(refreshToken);
 
       // Store refresh token
       await db.insert(refreshTokens).values({
-        userId: newUser[0].id,
+        userId: newUser.id,
         tokenHash: hashedRefreshToken,
         expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
+        createdAt: now,
+        revoked: 0,
       });
 
       // Create session
+      const sessionExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
       await db.insert(sessions).values({
-        userId: newUser[0].id,
-        ipAddress: req.ip,
-        userAgent: req.get('User-Agent'),
+        userId: newUser.id,
+        ipAddress: req.ip || 'unknown',
+        userAgent: req.get('User-Agent') || 'unknown',
+        expiresAt: sessionExpiry,
       });
 
       // Remove password from response
-      const { passwordHash, ...userWithoutPassword } = newUser[0];
+      const { passwordHash, ...userWithoutPassword } = newUser;
 
       res.status(201).json({
         user: userWithoutPassword,
@@ -170,19 +174,24 @@ export const authController = {
       const accessToken = generateAccessToken(user[0].id);
       const refreshToken = generateRefreshToken(user[0].id);
       const hashedRefreshToken = await hashRefreshToken(refreshToken);
+      const now = new Date();
 
       // Store refresh token
       await db.insert(refreshTokens).values({
         userId: user[0].id,
         tokenHash: hashedRefreshToken,
         expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
+        createdAt: now,
+        revoked: 0,
       });
 
       // Create session
+      const sessionExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
       await db.insert(sessions).values({
         userId: user[0].id,
-        ipAddress: req.ip,
-        userAgent: req.get('User-Agent'),
+        ipAddress: req.ip || 'unknown',
+        userAgent: req.get('User-Agent') || 'unknown',
+        expiresAt: sessionExpiry,
       });
 
       // Remove password from response
@@ -238,7 +247,7 @@ export const authController = {
         .where(
           and(
             eq(refreshTokens.userId, decoded.userId),
-            eq(refreshTokens.revoked, false)
+            eq(refreshTokens.revoked, 0)
           )
         )
         .limit(1);
@@ -262,6 +271,7 @@ export const authController = {
       const newAccessToken = generateAccessToken(decoded.userId);
       const newRefreshToken = generateRefreshToken(decoded.userId);
       const newHashedRefreshToken = await hashRefreshToken(newRefreshToken);
+      const now = new Date();
 
       // Update refresh token
       await db
@@ -273,10 +283,12 @@ export const authController = {
         .where(eq(refreshTokens.id, storedToken[0].id));
 
       // Create session
+      const sessionExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
       await db.insert(sessions).values({
         userId: decoded.userId,
-        ipAddress: req.ip,
-        userAgent: req.get('User-Agent'),
+        ipAddress: req.ip || 'unknown',
+        userAgent: req.get('User-Agent') || 'unknown',
+        expiresAt: sessionExpiry,
       });
 
       // Remove password from response
@@ -305,7 +317,7 @@ export const authController = {
 
         await db
           .update(refreshTokens)
-          .set({ revoked: true })
+          .set({ revoked: 1 })
           .where(eq(refreshTokens.userId, decoded.userId));
       }
 

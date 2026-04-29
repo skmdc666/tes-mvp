@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authController } from '../controllers/auth.controller';
-import { authRateLimiter } from '../middleware/auth.middleware';
+import { authRateLimiter, authenticateToken } from '../middleware/auth.middleware';
 
 const router = Router();
 
@@ -14,6 +14,6 @@ router.post('/refresh', authController.refreshToken);
 router.post('/logout', authController.logout);
 
 // Protected routes
-router.get('/profile', authController.getProfile);
+router.get('/profile', authenticateToken, authController.getProfile);
 
 export default router;

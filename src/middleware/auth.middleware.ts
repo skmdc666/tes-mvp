@@ -57,19 +57,15 @@ export const authenticateToken = async (req: Request, res: Response, next: NextF
     }
 
     // Check if user has an active session
+    const now = new Date();
     const session = await db
       .select()
       .from(sessions)
-      .where(
-        and(
-          eq(sessions.userId, decoded.userId),
-          sql`${sessions.expiresAt} > NOW()`
-        )
-      )
+      .where(eq(sessions.userId, decoded.userId))
       .limit(1);
 
-    // If no active session, reject
-    if (!session.length) {
+    // If no active session or session expired, reject
+    if (!session.length || (session[0].expiresAt && session[0].expiresAt < now)) {
       return res.status(401).json({ error: 'No active session found' });
     }
 
