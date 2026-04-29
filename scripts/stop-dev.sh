@@ -7,17 +7,19 @@ set -e
 
 echo "🛑 Stopping TES MVP Development Environment..."
 
-# Stop services
-echo "🐳 Stopping Docker containers..."
-docker-compose -f docker-compose.dev.yml down -v --remove-orphans
+# Stop all Docker Compose services
+echo "🐳 Stopping Docker services..."
+docker-compose down
 
-# Clean up build cache (optional)
-read -p "🧹 Clean up Docker build cache? (y/N): " -n 1 -r
-echo
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-    echo "🧹 Cleaning up Docker build cache..."
+# Stop and remove containers, networks, and volumes if requested
+if [ "$1" = "--clean" ]; then
+    echo "🧹 Cleaning up volumes and networks..."
+    docker-compose down -v
     docker system prune -f
-    echo "✅ Docker cache cleaned"
+    echo "✅ Cleaned up all volumes and networks"
 fi
 
 echo "🎉 Development environment stopped!"
+echo ""
+echo "💡 To restart: ./scripts/start-dev.sh"
+echo "💡 To start fresh: ./scripts/start-dev.sh --clean"

@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import { db } from '../db/index';
 import { DatabaseUtils } from '../db/utils';
-import { tasks, taskComments, taskHistory, projects, users } from '../db/schema';
+import { tasks, taskComments, taskHistory, projects, users, projectMembers } from '../db/schema';
+import { webSocketManager } from '../websocket';
 import { eq, and, or, desc } from 'drizzle-orm';
 import { z } from 'zod';
 import sql from 'sql-template-strings';
@@ -124,6 +125,12 @@ router.post('/', async (req, res) => {
       'Task created'
     );
 
+    // Broadcast task creation to WebSocket subscribers
+    webSocketManager.broadcastTaskCreated(taskData.projectId, newTask[0].id, {
+      ...newTask[0],
+      updatedBy: userId,
+    });
+
     res.status(201).json(newTask[0]);
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -205,6 +212,16 @@ router.put('/:id', async (req, res) => {
       );
     }
 
+    // Broadcast task update to WebSocket subscribers
+    webSocketManager.broadcastTaskUpdate(currentTask[0].projectId, {
+      id: updatedTask[0].id,
+      title: updatedTask[0].title,
+      status: updatedTask[0].status,
+      priority: updatedTask[0].priority,
+      assigneeId: updatedTask[0].assigneeId,
+      updatedBy: userId,
+    });
+
     res.json(updatedTask[0]);
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -224,6 +241,12 @@ router.delete('/:id', async (req, res) => {
       return res.status(401).json({ error: 'User ID required' });
     }
 
+    // Get task before deleting (to get projectId for WebSocket broadcast)
+    const taskToDelete = await db.select().from(tasks).where(eq(tasks.id, id)).limit(1);
+    if (!taskToDelete || taskToDelete.length === 0) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
     // Delete related comments and history first
     await db.delete(taskComments).where(eq(taskComments.taskId, id));
     await db.delete(taskHistory).where(eq(taskHistory.taskId, id));
@@ -234,6 +257,9 @@ router.delete('/:id', async (req, res) => {
     if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Task not found' });
     }
+
+    // Broadcast task deletion to WebSocket subscribers
+    webSocketManager.broadcastTaskDeleted(taskToDelete[0].projectId, id, userId);
 
     res.status(204).send();
   } catch (error) {
@@ -256,6 +282,12 @@ router.post('/:id/comments', async (req, res) => {
       return res.status(400).json({ error: 'Content is required' });
     }
 
+    // Get task to find projectId
+    const task = await db.select().from(tasks).where(eq(tasks.id, id)).limit(1);
+    if (!task.length) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
     const newComment = await db
       .insert(taskComments)
       .values({
@@ -275,6 +307,14 @@ router.post('/:id/comments', async (req, res) => {
       null,
       'Added comment'
     );
+
+    // Broadcast comment added to WebSocket subscribers
+    webSocketManager.broadcastTaskCommentAdded(id, task[0].projectId, {
+      id: newComment[0].id,
+      userId,
+      content: newComment[0].content,
+      createdAt: newComment[0].createdAt,
+    });
 
     res.status(201).json(newComment[0]);
   } catch (error) {

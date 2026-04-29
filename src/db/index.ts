@@ -1,13 +1,13 @@
-import { drizzle } from 'drizzle-orm/postgres-js';
-import postgres from 'postgres';
-import * as schema from './schema';
+import { drizzle } from 'drizzle-orm/better-sqlite3';
+import Database from 'better-sqlite3';
+import * as schema from './schema-sqlite';
 
 // Connection for query purposes
-const connectionString = process.env.DATABASE_URL || 'postgresql://tes_user:tes_password@localhost:5432/tes_mvp';
-const queryClient = postgres(connectionString);
+const connectionString = process.env.DATABASE_URL?.replace('file:', '') || './dev.db';
+const queryClient = new Database(connectionString);
 
 // Database instance
 export const db = drizzle(queryClient, { schema });
 
 // Export all schema elements
-export * from './schema';
+export * from './schema-sqlite';

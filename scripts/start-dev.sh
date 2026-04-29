@@ -19,43 +19,63 @@ if ! command -v docker-compose &> /dev/null; then
     exit 1
 fi
 
-# Create .env file if it doesn't exist
-if [ ! -f .env ]; then
-    echo "📝 Creating .env file..."
-    cp .env.example .env
-    echo "✅ .env file created from .env.example"
-    echo "⚠️  Please update .env with your database configuration"
+# Check if we're in the correct directory
+if [ ! -f "package.json" ]; then
+    echo "❌ package.json not found. Please run this script from the project root."
+    exit 1
 fi
 
-# Start services
-echo "🐳 Starting Docker containers..."
-docker-compose -f docker-compose.dev.yml up --build -d
+# Check if .env file exists
+if [ ! -f ".env" ]; then
+    echo "⚠️  .env file not found. Creating from template..."
+    cp .env.example .env
+    echo "✅ .env file created. Please update it with your configuration."
+fi
+
+# Create logs directory if it doesn't exist
+mkdir -p logs
+
+# Start Docker Compose
+echo "🐳 Starting Docker services..."
+docker-compose -f docker-compose.yml -f docker-compose.override.yml up --build -d
 
 # Wait for database to be ready
 echo "⏳ Waiting for database to be ready..."
-sleep 10
-
-# Check if database is ready
-until docker-compose -f docker-compose.dev.yml exec -T postgres pg_isready -U tes_user_dev -d tes_mvp_dev; do
-    echo "⏳ Waiting for database..."
+until docker-compose exec -T db pg_isready -U tes_user -d tes_mvp &> /dev/null; do
+    echo "Waiting for database..."
     sleep 2
 done
 
-echo "✅ Database is ready!"
+# Wait for Redis to be ready
+echo "⏳ Waiting for Redis to be ready..."
+until docker-compose exec -T redis redis-cli ping &> /dev/null; do
+    echo "Waiting for Redis..."
+    sleep 2
+done
 
-# Run database migrations if needed
+# Wait for app to be ready
+echo "⏳ Waiting for application to be ready..."
+until curl -f http://localhost:3001/health &> /dev/null; do
+    echo "Waiting for application..."
+    sleep 2
+done
+
+# Run database migrations
 echo "🔄 Running database migrations..."
-docker-compose -f docker-compose.dev.yml exec -T app npm run migrate || echo "⚠️  No migrations found"
+docker-compose exec -T app npm run migrate || echo "⚠️  No migrations found"
 
-# Show status
-echo "📊 Development Environment Status:"
-echo "   🌐 Application: http://localhost:3001"
-echo "   📊 Health Check: http://localhost:3001/health"
-echo "   🗄️  Database: localhost:5432"
-echo "   📖 Database: tes_mvp_dev"
-echo "   👤 User: tes_user_dev"
-echo "   🔑 Password: tes_password_dev"
+# Seed the database
+echo "🌱 Seeding database with sample data..."
+docker-compose exec -T app npm run db:seed || echo "⚠️  No seed script found"
 
-echo "🎉 Development environment is ready!"
-echo "💡 To view logs: docker-compose -f docker-compose.dev.yml logs -f"
-echo "💡 To stop: docker-compose -f docker-compose.dev.yml down"
+echo "✅ Development environment is ready!"
+echo ""
+echo "🌐 Application URL: http://localhost:3001"
+echo "📊 Adminer URL: http://localhost:8080"
+echo "🔗 Database: postgres://tes_user:tes_password@localhost:5432/tes_mvp"
+echo "🔗 Redis: redis://localhost:6379"
+echo "📋 Logs: ./logs"
+echo ""
+echo "To view logs: docker-compose logs -f"
+echo "To stop: docker-compose down"
+echo "To reset: docker-compose down -v && docker-compose up --build -d"

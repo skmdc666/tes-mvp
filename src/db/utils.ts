@@ -1,5 +1,13 @@
 import { sql } from 'drizzle-orm';
 import { db } from './index';
+import {
+  tasks,
+  taskHistory,
+  taskComments,
+  projects,
+  users,
+  projectMembers,
+} from './schema';
 import type {
   User,
   Project,
@@ -7,8 +15,6 @@ import type {
   TaskComment,
   TaskHistory,
   TaskStatus,
-  TaskPriority,
-  ProjectStatus
 } from './schema';
 
 // Database utility functions for common operations

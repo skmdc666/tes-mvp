@@ -5,23 +5,29 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: tes-mvp-app
+    container_name: tes-mvp-app-dev
     ports:
       - "3001:3001"
     environment:
-      - NODE_ENV=${NODE_ENV:-production}
+      - NODE_ENV=development
       - PORT=3001
-      - DATABASE_URL=${DATABASE_URL}
+      - DATABASE_URL=postgresql://tes_user:tes_password@tes-mvp-db:5432/tes_mvp
       - JWT_SECRET=${JWT_SECRET}
-      - RAILWAY_ENVIRONMENT=${RAILWAY_ENVIRONMENT:-production}
+      - RAILWAY_ENVIRONMENT=development
     volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.env
       - ./logs:/app/logs
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - tes-network
     restart: unless-stopped
+    command: npm run dev
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
       interval: 30s
@@ -31,7 +37,7 @@ services:
 
   db:
     image: postgres:15-alpine
-    container_name: tes-mvp-db
+    container_name: tes-mvp-db-dev
     environment:
       POSTGRES_DB: tes_mvp
       POSTGRES_USER: tes_user
@@ -41,8 +47,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
-      - ./docker/postgres/postgresql.conf:/etc/postgresql/postgresql.conf
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     networks:
       - tes-network
     restart: unless-stopped
@@ -52,23 +57,15 @@ services:
       timeout: 10s
       retries: 5
       start_period: 60s
-    command: >
-      postgres -c config_file=/etc/postgresql/postgresql.conf
-      -c wal_level=replica
-      -c synchronous_commit=off
-      -c random_page_cost=1.1
-      -c effective_cache_size=256MB
-      -c maintenance_work_mem=64MB
-      -c checkpoint_timeout=30min
 
   redis:
     image: redis:7-alpine
-    container_name: tes-mvp-redis
+    container_name: tes-mvp-redis-dev
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
-      - ./docker/redis/redis.conf:/usr/local/etc/redis/redis.conf
+      - ./docker/redis/redis.conf:/etc/redis/redis.conf:ro
     networks:
       - tes-network
     restart: unless-stopped
@@ -78,7 +75,31 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
-    command: redis-server /usr/local/etc/redis/redis.conf
+
+  # Development tools
+  adminer:
+    image: adminer
+    container_name: tes-mvp-adminer
+    ports:
+      - "8080:8080"
+    networks:
+      - tes-network
+    restart: unless-stopped
+    environment:
+      ADMINER_DEFAULT_SERVER: tes-mvp-db
+      ADMINER_DESIGN: "nette"
+
+  # Visualizer for docker-compose
+  visualizer:
+    image: dockersamples/visualizer:stable
+    container_name: tes-mvp-visualizer
+    ports:
+      - "8081:8080"
+    networks:
+      - tes-network
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
 
 volumes:
   postgres_data:

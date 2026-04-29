@@ -3,7 +3,7 @@ import { createId } from '@paralleldrive/cuid2';
 
 // Users table
 export const users = pgTable('users', {
-  id: text('id').$defaultFn(createId).primaryKey(),
+  id: text('id').primaryKey().default(createId()),
   email: text('email').notNull().unique(),
   passwordHash: text('password_hash').notNull(),
   firstName: text('first_name'),
@@ -17,7 +17,7 @@ export const users = pgTable('users', {
 
 // Projects table
 export const projects = pgTable('projects', {
-  id: text('id').$defaultFn(createId).primaryKey(),
+  id: text('id').primaryKey().default(createId()),
   name: text('name').notNull(),
   description: text('description'),
   status: varchar('status', { length: 20 }).default('active').notNull(),
@@ -30,7 +30,7 @@ export const projects = pgTable('projects', {
 
 // Tasks table
 export const tasks = pgTable('tasks', {
-  id: text('id').$defaultFn(createId).primaryKey(),
+  id: text('id').primaryKey().default(createId()),
   title: text('title').notNull(),
   description: text('description'),
   status: varchar('status', { length: 20 }).default('todo').notNull(),
@@ -44,7 +44,7 @@ export const tasks = pgTable('tasks', {
   completedAt: timestamp('completed_at'),
   estimatedHours: integer('estimated_hours'),
   actualHours: integer('actual_hours'),
-  tags: jsonb('tags').default(['']).array().notNull(),
+  tags: jsonb('tags').default('[]').notNull(),
   parentTaskId: text('parent_task_id').references(() => tasks.id),
   position: integer('position').default(0).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
@@ -53,7 +53,7 @@ export const tasks = pgTable('tasks', {
 
 // Task comments table
 export const taskComments = pgTable('task_comments', {
-  id: text('id').$defaultFn(createId).primaryKey(),
+  id: text('id').primaryKey().default(createId()),
   taskId: text('task_id').references(() => tasks.id, { onDelete: 'cascade' }).notNull(),
   userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
   content: text('content').notNull(),
@@ -64,7 +64,7 @@ export const taskComments = pgTable('task_comments', {
 
 // Task attachments table
 export const taskAttachments = pgTable('task_attachments', {
-  id: text('id').$defaultFn(createId).primaryKey(),
+  id: text('id').primaryKey().default(createId()),
   taskId: text('task_id').references(() => tasks.id, { onDelete: 'cascade' }).notNull(),
   fileName: text('file_name').notNull(),
   fileUrl: text('file_url').notNull(),
@@ -76,20 +76,17 @@ export const taskAttachments = pgTable('task_attachments', {
 
 // Project members table
 export const projectMembers = pgTable('project_members', {
-  id: text('id').$defaultFn(createId).primaryKey(),
+  id: text('id').primaryKey().default(createId()),
   projectId: text('project_id').references(() => projects.id, { onDelete: 'cascade' }).notNull(),
   userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
   role: varchar('role', { length: 20 }).default('member').notNull(),
   joinedAt: timestamp('joined_at').defaultNow().notNull(),
   isActive: boolean('is_active').default(true).notNull(),
-
-  // Unique constraint to prevent duplicate members
-  unique: ['project_id', 'userId'],
 });
 
 // Task history table for audit trail
 export const taskHistory = pgTable('task_history', {
-  id: text('id').$defaultFn(createId).primaryKey(),
+  id: text('id').primaryKey().default(createId()),
   taskId: text('task_id').references(() => tasks.id, { onDelete: 'cascade' }).notNull(),
   userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
   action: varchar('action', { length: 50 }).notNull(), // created, updated, status_changed, assigned, etc.
